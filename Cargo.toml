@@ -1,0 +1,28 @@
+[package]
+name = "pixel_paint_rs"
+version = "0.1.0"
+edition = "2024"
+description = "Standalone grid-based drawing app"
+readme = "README.md"
+
+[package.metadata.bundle]
+name = "Pixel Paint RS"
+identifier = "rs.gen.pixel_paint_rs"
+short_description = "Grid-based drawing and scheme sketching"
+
+[dependencies]
+directories = "5"
+eframe = { version = "0.33", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
+strip = true

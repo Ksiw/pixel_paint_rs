@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Pixel Paint RS
+GenericName=Grid Drawing Editor
+Comment=Grid-based drawing and scheme sketching
+Exec=pixel_paint_rs
+Icon=pixel_paint_rs
+Terminal=false
+Categories=Graphics;2DGraphics;RasterGraphics;
+StartupNotify=true
+Keywords=pixel;paint;grid;drawing;editor;

@@ -1,0 +1,33 @@
+# Rust build outputs
+/target/
+**/*.rs.bk
+
+# Cargo and tooling
+/.cargo/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.code-workspace
+
+# OS-specific junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Runtime/debug artifacts
+*.pdb
+*.dSYM/
+
+# Local release packaging leftovers
+/dist/
+/build/
+/out/

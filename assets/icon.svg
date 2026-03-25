@@ -1,0 +1,27 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="256" rx="52" fill="#21252B"/>
+  <rect x="20" y="20" width="216" height="216" rx="40" fill="#161A21"/>
+
+  <g opacity="0.55" stroke="#3A404C" stroke-width="2">
+    <path d="M56 44V212"/>
+    <path d="M92 44V212"/>
+    <path d="M128 44V212"/>
+    <path d="M164 44V212"/>
+    <path d="M200 44V212"/>
+    <path d="M44 56H212"/>
+    <path d="M44 92H212"/>
+    <path d="M44 128H212"/>
+    <path d="M44 164H212"/>
+    <path d="M44 200H212"/>
+  </g>
+
+  <rect x="74" y="126" width="34" height="34" rx="6" fill="#61AFEF"/>
+  <rect x="110" y="126" width="34" height="34" rx="6" fill="#61AFEF"/>
+  <rect x="146" y="126" width="34" height="34" rx="6" fill="#61AFEF"/>
+  <rect x="146" y="90" width="34" height="34" rx="6" fill="#61AFEF"/>
+  <rect x="110" y="162" width="34" height="34" rx="6" fill="#7EAB84"/>
+
+  <path d="M148.76 58.93L188.07 98.24L177.55 108.76L138.24 69.45L148.76 58.93Z" fill="#F3984E"/>
+  <path d="M188.07 98.24L198.25 88.06C202.74 83.57 202.74 76.29 198.25 71.8L175.2 48.75C170.71 44.26 163.43 44.26 158.94 48.75L148.76 58.93L188.07 98.24Z" fill="#E86860"/>
+  <path d="M132.65 75.04L142.64 65.05L181.95 104.36L171.96 114.35C169.97 116.34 166.74 116.34 164.75 114.35L132.65 82.25C130.66 80.26 130.66 77.03 132.65 75.04Z" fill="#F1F3F5"/>
+</svg>
