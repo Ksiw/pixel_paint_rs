@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
+#[derive(
+    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash, Default,
+)]
 pub enum DrawPrimitive {
     #[default]
     Line,

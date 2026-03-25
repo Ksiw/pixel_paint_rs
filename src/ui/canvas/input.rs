@@ -1,7 +1,9 @@
 use super::geometry::screen_to_grid_cell;
 use super::render::{paint_grid, paint_strokes};
 use crate::app::{EditorState, PaintTool};
-use crate::domain::{DrawPrimitive, DrawStroke, PaintDocument};
+use crate::domain::{
+    DrawHistoryAction, DrawPrimitive, DrawStroke, PaintDocument, PendingDrawAction, StyledCell,
+};
 use crate::localization::LocalizationManager;
 use eframe::egui;
 use std::collections::{HashSet, VecDeque};
@@ -9,33 +11,19 @@ use std::collections::{HashSet, VecDeque};
 const UNDO_HISTORY_LIMIT: usize = 100;
 
 pub fn apply_draw_undo(document: &mut PaintDocument, editor: &mut EditorState) {
-    let Some(previous) = editor.draw_undo_stack.pop() else {
+    let Some(action) = editor.draw_undo_stack.pop() else {
         return;
     };
-    if let Some(current) = document
-        .active_tab_strokes()
-        .map(|strokes| strokes.to_vec())
-    {
-        editor.draw_redo_stack.push(current);
-        if let Some(strokes) = document.active_tab_strokes_mut() {
-            *strokes = previous;
-        }
-    }
+    apply_history_action_inverse(document, &action);
+    editor.draw_redo_stack.push(action);
 }
 
 pub fn apply_draw_redo(document: &mut PaintDocument, editor: &mut EditorState) {
-    let Some(next) = editor.draw_redo_stack.pop() else {
+    let Some(action) = editor.draw_redo_stack.pop() else {
         return;
     };
-    if let Some(current) = document
-        .active_tab_strokes()
-        .map(|strokes| strokes.to_vec())
-    {
-        editor.draw_undo_stack.push(current);
-        if let Some(strokes) = document.active_tab_strokes_mut() {
-            *strokes = next;
-        }
-    }
+    apply_history_action(document, &action);
+    editor.draw_undo_stack.push(action);
 }
 
 pub fn interact(
@@ -97,10 +85,16 @@ fn handle_draw_mode(
         .ctx()
         .input(|i| i.pointer.button_down(egui::PointerButton::Primary));
 
-    // Snapshot берётся в начале жеста рисования, чтобы весь drag складывался в один шаг undo.
-    if primary_down && editor.draw_action_snapshot.is_none() {
-        editor.draw_action_snapshot = document.active_tab_strokes().map(|s| s.to_vec());
-        editor.draw_action_changed = false;
+    if primary_down && matches!(editor.pending_draw_action, PendingDrawAction::None) {
+        editor.pending_draw_action = match editor.tool {
+            PaintTool::Draw => PendingDrawAction::Draw {
+                primitive: editor.primitive,
+                size_index: editor.size_index.min(3),
+                color_index: editor.color_index,
+                cells: Vec::new(),
+            },
+            PaintTool::Erase => PendingDrawAction::Erase { cells: Vec::new() },
+        };
     }
 
     if let Some(pointer_pos) = pointer_pos {
@@ -116,8 +110,8 @@ fn handle_draw_mode(
                         } else {
                             erase_at_cell(document, cell[0], cell[1])
                         };
-                        if removed > 0 {
-                            editor.draw_action_changed = true;
+                        if !removed.is_empty() {
+                            push_erased_cells(&mut editor.pending_draw_action, removed);
                             changed = true;
                         }
                     }
@@ -131,7 +125,7 @@ fn handle_draw_mode(
                         )
                         .is_some();
                         if stroke_added {
-                            editor.draw_action_changed = true;
+                            push_draw_cell(&mut editor.pending_draw_action, cell);
                             changed = true;
                         }
                     }
@@ -145,21 +139,146 @@ fn handle_draw_mode(
     }
 
     if !primary_down {
-        // Undo пополняется только если жест реально что-то изменил.
-        if editor.draw_action_changed {
-            if let Some(snapshot) = editor.draw_action_snapshot.take() {
-                editor.draw_undo_stack.push(snapshot);
-                if editor.draw_undo_stack.len() > UNDO_HISTORY_LIMIT {
-                    let _ = editor.draw_undo_stack.remove(0);
-                }
-                editor.draw_redo_stack.clear();
+        if let Some(action) =
+            finalize_pending_action(document.active_tab_id, &mut editor.pending_draw_action)
+        {
+            editor.draw_undo_stack.push(action);
+            if editor.draw_undo_stack.len() > UNDO_HISTORY_LIMIT {
+                let _ = editor.draw_undo_stack.remove(0);
             }
-        } else {
-            editor.draw_action_snapshot = None;
+            editor.draw_redo_stack.clear();
         }
-        editor.draw_action_changed = false;
+        editor.pending_draw_action = PendingDrawAction::None;
     }
     changed
+}
+
+fn push_draw_cell(pending_action: &mut PendingDrawAction, cell: [i32; 2]) {
+    if let PendingDrawAction::Draw { cells, .. } = pending_action
+        && !cells.contains(&cell)
+    {
+        cells.push(cell);
+    }
+}
+
+fn push_erased_cells(pending_action: &mut PendingDrawAction, removed_cells: Vec<StyledCell>) {
+    if let PendingDrawAction::Erase { cells } = pending_action {
+        for removed in removed_cells {
+            if !cells.contains(&removed) {
+                cells.push(removed);
+            }
+        }
+    }
+}
+
+fn finalize_pending_action(
+    tab_id: u64,
+    pending_action: &mut PendingDrawAction,
+) -> Option<DrawHistoryAction> {
+    match pending_action {
+        PendingDrawAction::None => None,
+        PendingDrawAction::Draw {
+            primitive,
+            size_index,
+            color_index,
+            cells,
+        } if !cells.is_empty() => Some(DrawHistoryAction::Draw {
+            tab_id,
+            primitive: *primitive,
+            size_index: *size_index,
+            color_index: *color_index,
+            cells: std::mem::take(cells),
+        }),
+        PendingDrawAction::Erase { cells } if !cells.is_empty() => Some(DrawHistoryAction::Erase {
+            tab_id,
+            cells: std::mem::take(cells),
+        }),
+        _ => None,
+    }
+}
+
+fn apply_history_action(document: &mut PaintDocument, action: &DrawHistoryAction) {
+    match action {
+        DrawHistoryAction::Draw {
+            tab_id,
+            primitive,
+            size_index,
+            color_index,
+            cells,
+        } => {
+            let original_tab = document.active_tab_id;
+            document.active_tab_id = *tab_id;
+            let _ = add_draw_stroke(
+                document,
+                *primitive,
+                *size_index,
+                *color_index,
+                cells.clone(),
+            );
+            document.active_tab_id = original_tab;
+        }
+        DrawHistoryAction::Erase { tab_id, cells } => {
+            remove_styled_cells(document, *tab_id, cells);
+        }
+    }
+}
+
+fn apply_history_action_inverse(document: &mut PaintDocument, action: &DrawHistoryAction) {
+    match action {
+        DrawHistoryAction::Draw {
+            tab_id,
+            primitive,
+            size_index,
+            color_index,
+            cells,
+        } => {
+            let styled_cells = cells
+                .iter()
+                .copied()
+                .map(|cell| StyledCell {
+                    primitive: *primitive,
+                    size_index: *size_index,
+                    color_index: *color_index,
+                    cell,
+                })
+                .collect::<Vec<_>>();
+            remove_styled_cells(document, *tab_id, &styled_cells);
+        }
+        DrawHistoryAction::Erase { tab_id, cells } => {
+            restore_styled_cells(document, *tab_id, cells);
+        }
+    }
+}
+
+fn remove_styled_cells(document: &mut PaintDocument, tab_id: u64, styled_cells: &[StyledCell]) {
+    let Some(strokes) = document.tab_strokes_mut(tab_id) else {
+        return;
+    };
+    for styled in styled_cells {
+        for stroke in strokes.iter_mut().filter(|stroke| {
+            stroke.primitive == styled.primitive
+                && stroke.size_index == styled.size_index
+                && stroke.color_index == styled.color_index
+        }) {
+            stroke.cells.retain(|cell| *cell != styled.cell);
+        }
+    }
+    strokes.retain(|stroke| !stroke.cells.is_empty());
+}
+
+fn restore_styled_cells(document: &mut PaintDocument, tab_id: u64, styled_cells: &[StyledCell]) {
+    let original_tab = document.active_tab_id;
+    document.active_tab_id = tab_id;
+    for styled in styled_cells {
+        let _ = add_draw_stroke(
+            document,
+            styled.primitive,
+            styled.size_index,
+            styled.color_index,
+            vec![styled.cell],
+        );
+    }
+    document.active_tab_id = original_tab;
 }
 
 fn add_draw_stroke(
@@ -199,25 +318,36 @@ fn add_draw_stroke(
     Some(id)
 }
 
-fn erase_at_cell(document: &mut PaintDocument, cx: i32, cy: i32) -> usize {
+fn erase_at_cell(document: &mut PaintDocument, cx: i32, cy: i32) -> Vec<StyledCell> {
     let Some(strokes) = document.active_tab_strokes_mut() else {
-        return 0;
+        return Vec::new();
     };
-    let mut removed = 0_usize;
+    let mut removed = Vec::new();
     for stroke in strokes.iter_mut() {
-        let before = stroke.cells.len();
-        stroke
-            .cells
-            .retain(|cell| !(cell[0] == cx && cell[1] == cy));
-        removed = removed.saturating_add(before.saturating_sub(stroke.cells.len()));
+        stroke.cells.retain(|cell| {
+            let should_remove = cell[0] == cx && cell[1] == cy;
+            if should_remove {
+                removed.push(StyledCell {
+                    primitive: stroke.primitive,
+                    size_index: stroke.size_index,
+                    color_index: stroke.color_index,
+                    cell: *cell,
+                });
+            }
+            !should_remove
+        });
     }
     strokes.retain(|stroke| !stroke.cells.is_empty());
     removed
 }
 
-fn erase_connected_color_at_cell(document: &mut PaintDocument, cx: i32, cy: i32) -> usize {
+fn erase_connected_color_at_cell(
+    document: &mut PaintDocument,
+    cx: i32,
+    cy: i32,
+) -> Vec<StyledCell> {
     let Some(strokes) = document.active_tab_strokes_mut() else {
-        return 0;
+        return Vec::new();
     };
 
     let Some(seed) = strokes
@@ -231,7 +361,7 @@ fn erase_connected_color_at_cell(document: &mut PaintDocument, cx: i32, cy: i32)
         })
         .map(|stroke| (stroke.primitive, stroke.size_index, stroke.color_index))
     else {
-        return 0;
+        return Vec::new();
     };
 
     let all_cells: HashSet<(i32, i32)> = strokes
@@ -244,7 +374,7 @@ fn erase_connected_color_at_cell(document: &mut PaintDocument, cx: i32, cy: i32)
         .flat_map(|stroke| stroke.cells.iter().map(|cell| (cell[0], cell[1])))
         .collect();
     if !all_cells.contains(&(cx, cy)) {
-        return 0;
+        return Vec::new();
     }
 
     let mut queue = VecDeque::from([(cx, cy)]);
@@ -266,15 +396,22 @@ fn erase_connected_color_at_cell(document: &mut PaintDocument, cx: i32, cy: i32)
         }
     }
 
-    let mut removed = 0_usize;
+    let mut removed = Vec::new();
     for stroke in strokes.iter_mut().filter(|stroke| {
         stroke.primitive == seed.0 && stroke.size_index == seed.1 && stroke.color_index == seed.2
     }) {
-        let before = stroke.cells.len();
-        stroke
-            .cells
-            .retain(|cell| !region.contains(&(cell[0], cell[1])));
-        removed = removed.saturating_add(before.saturating_sub(stroke.cells.len()));
+        stroke.cells.retain(|cell| {
+            let should_remove = region.contains(&(cell[0], cell[1]));
+            if should_remove {
+                removed.push(StyledCell {
+                    primitive: stroke.primitive,
+                    size_index: stroke.size_index,
+                    color_index: stroke.color_index,
+                    cell: *cell,
+                });
+            }
+            !should_remove
+        });
     }
     strokes.retain(|stroke| !stroke.cells.is_empty());
     removed

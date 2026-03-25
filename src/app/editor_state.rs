@@ -1,4 +1,4 @@
-use crate::domain::{DrawPrimitive, DrawStroke};
+use crate::domain::{DrawHistoryAction, DrawPrimitive, PendingDrawAction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PaintTool {
@@ -18,10 +18,9 @@ pub struct EditorState {
     pub size_index: u8,
     pub color_index: u8,
     pub last_paint_cell: Option<[i32; 2]>,
-    pub draw_undo_stack: Vec<Vec<DrawStroke>>,
-    pub draw_redo_stack: Vec<Vec<DrawStroke>>,
-    pub draw_action_snapshot: Option<Vec<DrawStroke>>,
-    pub draw_action_changed: bool,
+    pub draw_undo_stack: Vec<DrawHistoryAction>,
+    pub draw_redo_stack: Vec<DrawHistoryAction>,
+    pub pending_draw_action: PendingDrawAction,
     pub renaming_tab_id: Option<u64>,
     pub renaming_tab_just_started: bool,
     pub tab_title_buffer: String,
@@ -41,8 +40,7 @@ impl Default for EditorState {
             last_paint_cell: None,
             draw_undo_stack: Vec::new(),
             draw_redo_stack: Vec::new(),
-            draw_action_snapshot: None,
-            draw_action_changed: false,
+            pending_draw_action: PendingDrawAction::None,
             renaming_tab_id: None,
             renaming_tab_just_started: false,
             tab_title_buffer: String::new(),

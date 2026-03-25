@@ -13,7 +13,7 @@ impl PaintDocument {
     pub fn new_with_title(title: String) -> Self {
         let first_tab = PaintTab::new(1, title);
         Self {
-            format_version: 1,
+            format_version: 2,
             active_tab_id: first_tab.id,
             next_tab_id: 2,
             next_stroke_id: 1,
@@ -33,6 +33,13 @@ impl PaintDocument {
         self.tabs
             .iter_mut()
             .find(|tab| tab.id == self.active_tab_id)
+            .map(|tab| &mut tab.draw_strokes)
+    }
+
+    pub fn tab_strokes_mut(&mut self, tab_id: u64) -> Option<&mut Vec<DrawStroke>> {
+        self.tabs
+            .iter_mut()
+            .find(|tab| tab.id == tab_id)
             .map(|tab| &mut tab.draw_strokes)
     }
 }
