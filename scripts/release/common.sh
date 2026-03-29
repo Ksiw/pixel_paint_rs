@@ -42,9 +42,25 @@ stage_linux_layout() {
 build_target_if_possible() {
     local target="$1"
     local linker_cmd="${2:-}"
+    local remap_root="/workspace/${APP_ID}"
+    local remap_home="/home/user"
+    local rustflags=(
+        "--remap-path-prefix=${REPO_ROOT}=${remap_root}"
+        "--remap-path-prefix=${HOME}/.cargo=/cargo-home"
+        "--remap-path-prefix=${HOME}/.rustup=/rustup-home"
+        "--remap-path-prefix=${HOME}=${remap_home}"
+    )
+    local encoded_rustflags=""
+    local flag
+    for flag in "${rustflags[@]}"; do
+        if [[ -n "${encoded_rustflags}" ]]; then
+            encoded_rustflags+=$'\x1f'
+        fi
+        encoded_rustflags+="${flag}"
+    done
 
     if [[ "${target}" == "$(host_target)" ]]; then
-        cargo build --release
+        CARGO_ENCODED_RUSTFLAGS="${encoded_rustflags}" cargo build --release
         return 0
     fi
 
@@ -59,18 +75,18 @@ build_target_if_possible() {
     fi
 
     if [[ "${target}" == "x86_64-pc-windows-gnu" ]]; then
-        cargo build --release --target "${target}"
+        CARGO_ENCODED_RUSTFLAGS="${encoded_rustflags}" cargo build --release --target "${target}"
         return 0
     fi
 
     if [[ -n "${linker_cmd}" ]]; then
         local target_env
         target_env="$(target_env_prefix "${target}")"
-        env "CARGO_TARGET_${target_env}_LINKER=${linker_cmd}" cargo build --release --target "${target}"
+        env "CARGO_TARGET_${target_env}_LINKER=${linker_cmd}" "CARGO_ENCODED_RUSTFLAGS=${encoded_rustflags}" cargo build --release --target "${target}"
         return 0
     fi
 
-    cargo build --release --target "${target}"
+    CARGO_ENCODED_RUSTFLAGS="${encoded_rustflags}" cargo build --release --target "${target}"
 }
 
 binary_path_for() {

@@ -63,6 +63,9 @@ cargo run
 - `Ctrl+Z` — undo
 - `Ctrl+Y` / `Ctrl+Shift+Z` — redo
 - `Home` / `Ctrl+0` — центрировать вид
+- `Q` — линия
+- `W` — квадратная точка
+- `1` / `2` / `3` / `4` — размер кисти
 
 ## Платформы
 
@@ -140,6 +143,9 @@ cargo run
 - `Ctrl+Z` — undo
 - `Ctrl+Y` / `Ctrl+Shift+Z` — redo
 - `Home` / `Ctrl+0` — center view
+- `Q` — line
+- `W` — square point
+- `1` / `2` / `3` / `4` — brush size
 
 ## Platforms
 
